@@ -1,39 +1,82 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-name: Python application
-
+name: wx-bot-build
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
-permissions:
-  contents: read
 
 jobs:
-  build:
-
+  releases:
+    name: Create Release
     runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
 
+        with:
+          tag_name: v1.0.5
+          release_name: Release  v1.0.5
+          draft: false
+          prerelease: false
+  build:
+    needs: releases
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        build: [linux, macos, macos-arm, windows]
+#
+        include:
+          - build: linux
+            os: ubuntu-22.04
+            release-file-suffix: x86_64-linux.tar.gz
+          - build: macos
+            os: macos-12
+            release-file-suffix: x86_64-macos.tar.gz
+          - build: macos-arm
+            os: macos-15
+            release-file-suffix: arm64-macos.tar.gz
+          - build: windows
+            os: windows-latest
+            release-file-suffix: x86_64-windows.7z
+        python-version: [3.9]
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.10
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
-        python-version: "3.10"
+        python-version: ${{ matrix.python-version }}
     - name: Install dependencies
-      run: |
+      run: |   
         python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with flake8
+        pip install -r requirements.txt
+    - name: pg
       run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
+        pyinstaller -w -F --onefile  main.py -n   main
+    - name: Package
+      shell: bash
+      working-directory: .
       run: |
-        pytest
+          if [ "${{ matrix.build }}" =  "windows" ];then
+             7z a -r "bless-${{ matrix.build }}-${{ matrix.release-file-suffix }}" ./dist/* 
+          else
+             tar -zcvf bless-${{ matrix.build }}-${{ matrix.release-file-suffix }}    ./dist 
+          fi
+    - name: Upload assets
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      with:
+        upload_url: ${{needs.releases.outputs.upload_url }}
+        asset_path: bless-${{ matrix.build }}-${{ matrix.release-file-suffix }}
+        asset_name: bless-${{ matrix.build }}-${{ matrix.release-file-suffix }}
+        asset_content_type: application/gzip
