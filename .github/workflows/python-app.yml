@@ -23,8 +23,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
 
         with:
-          tag_name: v1.0.5
-          release_name: Release  v1.0.5
+          tag_name: v2.0.5
+          release_name: Release  v2.0.5
           draft: false
           prerelease: false
   build:
@@ -60,7 +60,7 @@ jobs:
         pip install -r requirements.txt
     - name: pg
       run: |
-        pyinstaller -w -F --onefile  main.py -n   main
+        pyinstaller  -F   main.py -n   main
     - name: Package
       shell: bash
       working-directory: .
